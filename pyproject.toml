@@ -30,6 +30,11 @@ dynamic = ["version"]
 Repository = "https://github.com/HanaokaYuzu/Gemini-API"
 Issues = "https://github.com/HanaokaYuzu/Gemini-API/issues"
 
+[project.optional-dependencies]
+browser = [
+    "browser-cookie3>=0.20.1,<0.21.0",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["gemini_webapi"]
