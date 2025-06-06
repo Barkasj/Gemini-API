@@ -21,7 +21,6 @@ async def get_access_token(
     Possible cookie sources:
     - Base cookies passed to the function.
     - __Secure-1PSID from base cookies with __Secure-1PSIDTS from cache.
-    - Local browser cookies (if optional dependency `browser-cookie3` is installed).
 
     Parameters
     ----------
@@ -98,29 +97,6 @@ async def get_access_token(
             logger.debug(
                 "Skipping loading cached cookies. Cookies will be cached after successful initialization."
             )
-
-    # Browser cookies (if browser-cookie3 is installed)
-    try:
-        browser_cookies = load_browser_cookies(
-            domain_name="google.com", verbose=verbose
-        )
-        if browser_cookies and (secure_1psid := browser_cookies.get("__Secure-1PSID")):
-            local_cookies = {"__Secure-1PSID": secure_1psid}
-            if secure_1psidts := browser_cookies.get("__Secure-1PSIDTS"):
-                local_cookies["__Secure-1PSIDTS"] = secure_1psidts
-            tasks.append(Task(send_request(local_cookies)))
-        elif verbose:
-            logger.debug(
-                "Skipping loading local browser cookies. Login to gemini.google.com in your browser first."
-            )
-    except ImportError:
-        if verbose:
-            logger.debug(
-                "Skipping loading local browser cookies. Optional dependency 'browser-cookie3' is not installed."
-            )
-    except Exception as e:
-        if verbose:
-            logger.warning(f"Skipping loading local browser cookies. {e}")
 
     for i, future in enumerate(asyncio.as_completed(tasks)):
         try:
