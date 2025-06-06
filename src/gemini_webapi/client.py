@@ -2,6 +2,8 @@ import asyncio
 import functools
 import json
 import re
+import os
+from dotenv import load_dotenv
 from asyncio import Task
 from pathlib import Path
 from typing import Any, Optional
@@ -30,6 +32,7 @@ from .utils import (
     logger,
 )
 
+load_dotenv()
 
 def running(retry: int = 0) -> callable:
     """
@@ -126,14 +129,33 @@ class GeminiClient:
         secure_1psid: str | None = None,
         secure_1psidts: str | None = None,
         proxy: str | None = None,
-        auto_load_cookies: bool = True,
+        auto_load_cookies: bool | None = None,  # Changed default to None
         preferred_browser: str | None = None,
         **kwargs,
     ):
         self.cookies = {}
         self.proxy = proxy
-        self.auto_load_cookies = auto_load_cookies
-        self.preferred_browser = preferred_browser
+
+        # Determine auto_load_cookies: constructor > env > default (True)
+        if auto_load_cookies is not None:
+            self.auto_load_cookies = auto_load_cookies
+        else:
+            env_auto_load = os.getenv("GEMINI_AUTO_LOAD_COOKIES")
+            if env_auto_load is not None:
+                self.auto_load_cookies = env_auto_load.lower() == 'true'
+            else:
+                self.auto_load_cookies = True  # Default if not in constructor or env
+
+        # Determine preferred_browser: constructor > env > default (None)
+        if preferred_browser is not None:
+            self.preferred_browser = preferred_browser
+        else:
+            env_preferred_browser = os.getenv("GEMINI_PREFERRED_BROWSER")
+            if env_preferred_browser is not None:
+                self.preferred_browser = env_preferred_browser
+            else:
+                self.preferred_browser = None  # Default if not in constructor or env
+
         self.running: bool = False
         self.client: AsyncClient | None = None
         self.access_token: str | None = None

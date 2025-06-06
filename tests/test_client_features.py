@@ -238,6 +238,66 @@ class TestGeminiClientCookieLoading(unittest.TestCase):
         mock_load_cookies_import_error.assert_called_once_with(domain_name="google.com", browser_name=None, verbose=True)
         self.assertEqual(client.cookies, {})
 
+    @patch.dict(os.environ, {
+        "GEMINI_AUTO_LOAD_COOKIES": "false",
+        "GEMINI_PREFERRED_BROWSER": "edge"
+    })
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_load_from_env_variables(self, mock_load_cookies, mock_get_token):
+        mock_get_token.return_value = ("mock_token", {})
+
+        client = GeminiClient()
+
+        self.assertFalse(client.auto_load_cookies)
+        self.assertEqual(client.preferred_browser, "edge")
+        mock_load_cookies.assert_not_called()
+
+    @patch.dict(os.environ, {
+        "GEMINI_AUTO_LOAD_COOKIES": "true",
+        "GEMINI_PREFERRED_BROWSER": "env_browser"
+    })
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_constructor_overrides_env(self, mock_load_cookies, mock_get_token):
+        mock_load_cookies.return_value = self.create_mock_cookies_data("browser_psid")
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data("browser_psid"))
+
+        client = GeminiClient(auto_load_cookies=False, preferred_browser="constructor_browser")
+
+        self.assertFalse(client.auto_load_cookies)
+        self.assertEqual(client.preferred_browser, "constructor_browser")
+        mock_load_cookies.assert_not_called()
+
+    @patch.dict(os.environ, {}, clear=True)
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_fallback_to_defaults_no_constructor_no_env(self, mock_load_cookies, mock_get_token):
+        mock_load_cookies.return_value = self.create_mock_cookies_data("default_psid")
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data("default_psid"))
+
+        client = GeminiClient()
+
+        self.assertTrue(client.auto_load_cookies)
+        self.assertIsNone(client.preferred_browser)
+        mock_load_cookies.assert_called_once_with(domain_name="google.com", browser_name=None, verbose=True)
+
+    @patch.dict(os.environ, {
+        "GEMINI_AUTO_LOAD_COOKIES": "not_a_boolean",
+        "GEMINI_PREFERRED_BROWSER": "env_browser_2"
+    })
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_env_invalid_boolean_evaluates_to_false(self, mock_load_cookies, mock_get_token): # Renamed for clarity
+        mock_load_cookies.return_value = self.create_mock_cookies_data("fallback_psid")
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data("fallback_psid"))
+
+        client = GeminiClient()
+
+        self.assertFalse(client.auto_load_cookies) # "not_a_boolean".lower() == 'true' is False
+        self.assertEqual(client.preferred_browser, "env_browser_2")
+        mock_load_cookies.assert_not_called() # Because auto_load_cookies is False
+
 
 if __name__ == "__main__":
     unittest.main()

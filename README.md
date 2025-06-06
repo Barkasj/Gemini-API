@@ -39,6 +39,34 @@ A reverse-engineered asynchronous python wrapper for [Google Gemini](https://gem
 
 - [Features](#features)
 - [Table of Contents](#table-of-contents)
+
+## Configuration
+
+The `GeminiClient` can be configured using environment variables, which are particularly useful for production deployments or when you prefer not to hardcode settings. These variables are typically defined in a `.env` file in your project's root directory. `python-dotenv` is used to load these variables, so ensure it's installed (it's a dependency of this package).
+
+The following environment variables are supported:
+
+*   **`GEMINI_AUTO_LOAD_COOKIES`**:
+    *   **Purpose**: Enables or disables the automatic loading of authentication cookies from your local web browsers. If enabled, and `browser-cookie3` is installed, the client will attempt to find necessary cookies without manual input.
+    *   **Valid Values**: `"true"` or `"false"`.
+    *   **Default**: `True` (if the variable is not set).
+
+*   **`GEMINI_PREFERRED_BROWSER`**:
+    *   **Purpose**: Specifies a preferred browser to load cookies from when `GEMINI_AUTO_LOAD_COOKIES` is `"true"`. If not set, the client will try all supported browsers it can find.
+    *   **Example Values**: `"chrome"`, `"firefox"`, `"edge"`, `"safari"`, `"opera"`, etc. (refer to `browser-cookie3` documentation for a full list of supported browser names).
+    *   **Default**: `None` (tries all available browsers).
+
+**Example `.env` file:**
+
+```env
+# .env example
+GEMINI_AUTO_LOAD_COOKIES="false"
+GEMINI_PREFERRED_BROWSER="firefox"
+```
+
+**Precedence**:
+Parameters passed directly to the `GeminiClient` constructor (e.g., `GeminiClient(auto_load_cookies=False, preferred_browser="chrome")`) will always take precedence over environment variables. Environment variables take precedence over the default values coded into the client.
+
 - [Installation](#installation)
 - [Authentication](#authentication)
 - [Usage](#usage)
