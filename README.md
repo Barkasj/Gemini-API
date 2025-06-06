@@ -105,61 +105,105 @@ pip install -U browser-cookie3
 
 ## Authentication
 
-> [!TIP]
->
-> If `browser-cookie3` is installed, you can skip this step and go directly to [usage](#usage) section. Just make sure you have logged in to <https://gemini.google.com> in your browser.
+The recommended way to authenticate is by allowing `GeminiClient` to automatically load cookies from your web browser. This requires the `browser-cookie3` package to be installed (see the [Installation](#installation) section).
 
-- Go to <https://gemini.google.com> and login with your Google account
-- Press F12 for web inspector, go to `Network` tab and refresh the page
-- Click any request and copy cookie values of `__Secure-1PSID` and `__Secure-1PSIDTS`
+This automated behavior is enabled by default (`auto_load_cookies=True`) and can be further customized:
+- **Enable/Disable**: Control with the `auto_load_cookies` parameter in the `GeminiClient` constructor or the `GEMINI_AUTO_LOAD_COOKIES` environment variable.
+- **Browser Choice**: Specify a browser with the `preferred_browser` constructor parameter or the `GEMINI_PREFERRED_BROWSER` environment variable.
+
+For detailed information on these parameters and environment variables, please refer to the [Configuration](#configuration) section.
+
+If you've enabled automatic cookie loading and are logged into <https://gemini.google.com> in a supported browser, you can typically initialize the client without manually providing cookie values.
+
+### Manual Cookie Retrieval
+
+If automated cookie loading is disabled, not preferred, or encounters issues, you can provide the authentication cookies manually:
+
+1.  Go to <https://gemini.google.com> and login with your Google account.
+2.  Press F12 to open your browser's developer tools.
+3.  Go to the `Network` tab and refresh the page.
+4.  Find any request to `gemini.google.com` (usually one of the first few).
+5.  In the request details, look for the "Cookies" section (it might be under "Headers").
+6.  Copy the values for `__Secure-1PSID` and (if present) `__Secure-1PSIDTS`.
 
 > [!NOTE]
+> If your application is deployed in a containerized environment (e.g. Docker), you may want to persist the cookies with a volume to avoid re-authentication every time the container rebuilds. This is particularly relevant if you are using manually provided cookies or if the environment where `browser-cookie3` runs doesn't have access to a browser session with active Gemini login.
 >
-> If your application is deployed in a containerized environment (e.g. Docker), you may want to persist the cookies with a volume to avoid re-authentication every time the container rebuilds.
->
-> Here's part of a sample `docker-compose.yml` file:
-
-```yaml
-services:
-    main:
-        volumes:
-            - ./gemini_cookies:/usr/local/lib/python3.12/site-packages/gemini_webapi/utils/temp
-```
+> Here's part of a sample `docker-compose.yml` file for persisting cached `__Secure-1PSIDTS` values (which the library can generate/use even with manually provided initial `__Secure-1PSID`):
+> ```yaml
+> services:
+>     main:
+>         volumes:
+>             - ./gemini_cookies:/usr/local/lib/python3.12/site-packages/gemini_webapi/utils/temp
+> ```
 
 > [!NOTE]
->
-> API's auto cookie refreshing feature doesn't require `browser-cookie3`, and by default is enabled. It allows you to keep the API service running without worrying about cookie expiration.
->
-> This feature may cause that you need to re-login to your Google account in the browser. This is an expected behavior and won't affect the API's functionality.
->
-> To avoid such result, it's recommended to get cookies from a separate browser session and close it as asap for best utilization (e.g. a fresh login in browser's private mode). More details can be found [here](https://github.com/HanaokaYuzu/Gemini-API/issues/6).
+> The API's auto cookie refreshing feature for `__Secure-1PSIDTS` (which helps maintain the session once initialized) works independently of `browser-cookie3` and is enabled by default.
+> This feature may cause you to be logged out of your Google account in the browser session from which the original `__Secure-1PSID` was taken if that cookie becomes invalidated due to prolonged use by the API. This is an expected behavior.
+> To minimize this, consider obtaining cookies from a dedicated browser session (e.g., private/incognito mode) that you can close after copying the cookies, especially if primarily relying on manual setup or long-running API instances. More details can be found [here](https://github.com/HanaokaYuzu/Gemini-API/issues/6).
 
 ## Usage
 
 ### Initialization
 
-Import required packages and initialize a client with your cookies obtained from the previous step. After a successful initialization, the API will automatically refresh `__Secure-1PSIDTS` in background as long as the process is alive.
+Import the required package and initialize the client.
 
 ```python
 import asyncio
 from gemini_webapi import GeminiClient
 
-# Replace "COOKIE VALUE HERE" with your actual cookie values.
-# Leave Secure_1PSIDTS empty if it's not available for your account.
-Secure_1PSID = "COOKIE VALUE HERE"
-Secure_1PSIDTS = "COOKIE VALUE HERE"
-
 async def main():
-    # If browser-cookie3 is installed, simply use `client = GeminiClient()`
-    client = GeminiClient(Secure_1PSID, Secure_1PSIDTS, proxy=None)
+    # Recommended: Automatic cookie loading (assumes browser-cookie3 is installed).
+    # Configure via environment variables or constructor parameters if needed.
+    # See the [Configuration](#configuration) section for details on auto_load_cookies and preferred_browser.
+    client = GeminiClient()
+
+    # Initialize the client (gets access token, etc.)
     await client.init(timeout=30, auto_close=False, close_delay=300, auto_refresh=True)
+
+    # Example: Generate content
+    # try:
+    #     response = await client.generate_content("Hello World!")
+    #     print(response.text)
+    # except Exception as e:
+    #     print(f"An error occurred: {e}")
 
 asyncio.run(main())
 ```
 
 > [!TIP]
->
-> `auto_close` and `close_delay` are optional arguments for automatically closing the client after a certain period of inactivity. This feature is disabled by default. In an always-on service like chatbot, it's recommended to set `auto_close` to `True` combined with reasonable seconds of `close_delay` for better resource management.
+> `auto_close` and `close_delay` are optional arguments for automatically closing the client after a certain period of inactivity. This feature is disabled by default. In an always-on service like a chatbot, it's recommended to set `auto_close` to `True` combined with a reasonable `close_delay` (in seconds) for better resource management.
+
+#### Manual Initialization (If Not Using Automated Cookie Loading)
+
+If you are not using automated cookie loading, or if it fails, you can initialize the client by directly providing the necessary cookie values:
+
+```python
+import asyncio
+from gemini_webapi import GeminiClient
+
+# Replace with your actual cookie values obtained manually
+YOUR_PSID_COOKIE = "YOUR___SECURE-1PSID_VALUE_HERE"
+YOUR_PSIDTS_COOKIE = "YOUR___SECURE-1PSIDTS_VALUE_HERE" # May not be required for all accounts
+
+async def main():
+    client = GeminiClient(
+        secure_1psid=YOUR_PSID_COOKIE,
+        secure_1psidts=YOUR_PSIDTS_COOKIE,
+        # proxy=None # Optional: if you need a proxy
+    )
+    await client.init(timeout=30, auto_close=False, close_delay=300, auto_refresh=True)
+
+    # Example: Generate content
+    # try:
+    #     response = await client.generate_content("Hello World!")
+    #     print(response.text)
+    # except Exception as e:
+    #     print(f"An error occurred: {e}")
+
+asyncio.run(main())
+```
+Make sure to replace placeholder cookie values with your actual ones.
 
 ### Select language model
 
