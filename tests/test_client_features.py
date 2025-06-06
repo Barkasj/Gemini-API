@@ -2,8 +2,10 @@ import os
 import unittest
 import logging
 from pathlib import Path
+from unittest.mock import patch, MagicMock # Added MagicMock
 
-from gemini_webapi import GeminiClient, AuthError, set_log_level, logger
+from src.gemini_webapi.client import GeminiClient # Corrected import path
+from gemini_webapi import AuthError, set_log_level, logger # GeminiClient was imported from here before, changed to specific path
 from gemini_webapi.constants import Model
 from gemini_webapi.exceptions import UsageLimitExceeded, ModelInvalid
 
@@ -156,6 +158,85 @@ class TestGeminiClient(unittest.IsolatedAsyncioTestCase):
         followup_response = await chat.send_message("Tell me more about it.")
         logger.warning(new_candidate.text)
         logger.warning(followup_response.text)
+
+
+# New Test Class for Cookie Loading
+MOCK_LOAD_BROWSER_COOKIES_PATH = "src.gemini_webapi.client.load_browser_cookies"
+MOCK_GET_ACCESS_TOKEN_PATH = "src.gemini_webapi.client.get_access_token"
+
+
+class TestGeminiClientCookieLoading(unittest.TestCase):
+
+    def create_mock_cookies_data(self, psid_val="test_psid", psidts_val="test_psidts"):
+        cookies = {}
+        if psid_val:
+            cookies["__Secure-1PSID"] = psid_val
+        if psidts_val:
+            cookies["__Secure-1PSIDTS"] = psidts_val
+        return cookies
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_with_explicit_cookies_no_browser_load(self, mock_load_cookies, mock_get_token):
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data())
+
+        client = GeminiClient(secure_1psid="explicit_psid", secure_1psidts="explicit_psidts")
+
+        mock_load_cookies.assert_not_called()
+        self.assertEqual(client.cookies["__Secure-1PSID"], "explicit_psid")
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_auto_load_true_preferred_browser_set(self, mock_load_cookies, mock_get_token):
+        mock_load_cookies.return_value = self.create_mock_cookies_data("browser_psid")
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data("browser_psid"))
+
+        client = GeminiClient(preferred_browser="firefox")
+
+        mock_load_cookies.assert_called_once_with(domain_name="google.com", browser_name="firefox", verbose=True)
+        self.assertEqual(client.cookies["__Secure-1PSID"], "browser_psid")
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_auto_load_true_no_preferred_browser(self, mock_load_cookies, mock_get_token):
+        mock_load_cookies.return_value = self.create_mock_cookies_data("any_browser_psid")
+        mock_get_token.return_value = ("mock_token", self.create_mock_cookies_data("any_browser_psid"))
+
+        client = GeminiClient()
+
+        mock_load_cookies.assert_called_once_with(domain_name="google.com", browser_name=None, verbose=True)
+        self.assertEqual(client.cookies["__Secure-1PSID"], "any_browser_psid")
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_auto_load_false(self, mock_load_cookies, mock_get_token):
+        mock_get_token.return_value = ("mock_token", {})
+
+        client = GeminiClient(auto_load_cookies=False)
+
+        mock_load_cookies.assert_not_called()
+        self.assertEqual(client.cookies, {})
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH)
+    def test_init_auto_load_true_browser_load_fails_no_psid(self, mock_load_cookies, mock_get_token):
+        mock_load_cookies.return_value = {"OTHER_COOKIE": "some_val"}
+        mock_get_token.return_value = ("mock_token", {})
+
+        client = GeminiClient()
+
+        mock_load_cookies.assert_called_once_with(domain_name="google.com", browser_name=None, verbose=True)
+        self.assertEqual(client.cookies, {})
+
+    @patch(MOCK_GET_ACCESS_TOKEN_PATH)
+    @patch(MOCK_LOAD_BROWSER_COOKIES_PATH, side_effect=ImportError("browser-cookie3 not installed"))
+    def test_init_auto_load_true_browser_cookie3_not_installed(self, mock_load_cookies_import_error, mock_get_token):
+        mock_get_token.return_value = ("mock_token", {})
+
+        client = GeminiClient(auto_load_cookies=True)
+
+        mock_load_cookies_import_error.assert_called_once_with(domain_name="google.com", browser_name=None, verbose=True)
+        self.assertEqual(client.cookies, {})
 
 
 if __name__ == "__main__":

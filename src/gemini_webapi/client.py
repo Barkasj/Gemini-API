@@ -107,6 +107,8 @@ class GeminiClient:
     __slots__ = [
         "cookies",
         "proxy",
+        "auto_load_cookies",
+        "preferred_browser",
         "running",
         "client",
         "access_token",
@@ -124,10 +126,14 @@ class GeminiClient:
         secure_1psid: str | None = None,
         secure_1psidts: str | None = None,
         proxy: str | None = None,
+        auto_load_cookies: bool = True,
+        preferred_browser: str | None = None,
         **kwargs,
     ):
         self.cookies = {}
         self.proxy = proxy
+        self.auto_load_cookies = auto_load_cookies
+        self.preferred_browser = preferred_browser
         self.running: bool = False
         self.client: AsyncClient | None = None
         self.access_token: str | None = None
@@ -144,15 +150,35 @@ class GeminiClient:
             self.cookies["__Secure-1PSID"] = secure_1psid
             if secure_1psidts:
                 self.cookies["__Secure-1PSIDTS"] = secure_1psidts
-        else:
+        elif self.auto_load_cookies:
             try:
-                cookies = load_browser_cookies(domain_name="google.com")
-                if not (cookies and cookies.get("__Secure-1PSID")):
-                    raise ValueError(
-                        "Failed to load cookies from local browser. Please pass cookie values manually."
+                loaded_cookies = load_browser_cookies(
+                    domain_name="google.com",
+                    browser_name=self.preferred_browser,
+                    verbose=True,  # Consistent with how load_browser_cookies was implicitly called
+                )
+                if loaded_cookies and loaded_cookies.get("__Secure-1PSID"):
+                    self.cookies = loaded_cookies
+                else:
+                    # This path is taken if auto-loading is on, but __Secure-1PSID isn't found.
+                    # No immediate error, but init() will fail if cookies remain essential and missing.
+                    logger.warning(
+                        f"Attempted to load cookies with browser='{self.preferred_browser if self.preferred_browser else 'any'}' "
+                        "but __Secure-1PSID was not found. Manual cookie provision may be required."
                     )
             except ImportError:
-                pass
+                logger.warning(
+                    "browser-cookie3 is not installed. Cannot automatically load cookies. "
+                    "Please provide cookies manually or install the dependency with: pip install gemini-webapi[browser]"
+                )
+            except Exception as e:
+                logger.error(f"An unexpected error occurred during cookie loading: {e}. Manual cookie provision may be required.")
+        # If secure_1psid was not given, and auto_load_cookies is False, or if auto-loading failed to set self.cookies,
+        # then self.cookies might be empty or lack __Secure-1PSID.
+        # The get_access_token function, called during self.init(), is responsible for
+        # raising an error if essential cookies like __Secure-1PSID are ultimately missing.
+
+    async def init(
 
     async def init(
         self,
